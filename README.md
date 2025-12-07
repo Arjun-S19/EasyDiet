@@ -1,5 +1,3 @@
----
-
 # EasyDiet — Conversational Gemini (Server + Console Client)
 
 This project provides:
@@ -219,5 +217,3 @@ Invoke-WebRequest http://localhost:8000/api/history/$cid
 ## License
 
 For class/demo use.
-
----
