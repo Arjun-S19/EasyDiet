@@ -88,7 +88,6 @@ pip install -r backend/requirements.txt
 # venv active
 python -m uvicorn backend.server:app --reload --host 0.0.0.0 --port 8000
 ```
-```
 
 Health check:
 
