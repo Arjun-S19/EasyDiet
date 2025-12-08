@@ -49,13 +49,13 @@ class ChatIn(BaseModel):
     message: str
     conversation_id: Optional[str] = None
 
-
+      
 class ChatOut(BaseModel):
     reply: str
     conversation_id: str
     model: str = MODEL
 
-
+      
 class ProfilePayload(BaseModel):
     fitness_goals: Optional[str] = None
     dietary_restrictions: Optional[str] = None
