@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import Navbar from '../components/Navbar'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext.jsx'
+
+const LAST_CHAT_KEY = 'easydiet:lastChatId'
 
 function normalizeMessages(history) {
   return (history || []).map((msg, index) => ({
@@ -22,6 +24,7 @@ function Chat() {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState('idle')
   const [sidebarLoading, setSidebarLoading] = useState(true)
+  const autoSelectAttempted = useRef(false)
 
   const loadConversations = useCallback(async () => {
     if (!session) return
@@ -37,6 +40,13 @@ function Chat() {
   useEffect(() => {
     loadConversations()
   }, [loadConversations])
+
+  useEffect(() => {
+    if (chatId) {
+      localStorage.setItem(LAST_CHAT_KEY, chatId)
+      autoSelectAttempted.current = false
+    }
+  }, [chatId])
 
   const loadMessages = useCallback(async (conversationId) => {
     if (!session || !conversationId) return
@@ -58,6 +68,21 @@ function Chat() {
       setStatus('idle')
     }
   }, [chatId, loadMessages])
+
+  useEffect(() => {
+    if (chatId || sidebarLoading || autoSelectAttempted.current) return
+    if (!conversations.length) {
+      autoSelectAttempted.current = true
+      return
+    }
+    const stored = localStorage.getItem(LAST_CHAT_KEY)
+    const storedConversation = conversations.find((conv) => conv.id === stored)
+    const targetId = storedConversation?.id || conversations[0]?.id
+    if (targetId) {
+      autoSelectAttempted.current = true
+      navigate(`/chat/${targetId}`, { replace: true })
+    }
+  }, [chatId, conversations, navigate, sidebarLoading])
 
   const createConversation = useCallback(async (replace = false) => {
     if (!session) return null
