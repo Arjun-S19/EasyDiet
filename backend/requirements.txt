@@ -3,4 +3,6 @@ uvicorn
 python-dotenv
 pydantic-settings
 google-generativeai
-sqlite3
+supabase
+pyjwt
+pytest

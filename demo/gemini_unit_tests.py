@@ -1,5 +1,5 @@
 import unittest
-from gemini_demo import validate_recipe_output
+from demo.gemini_demo import validate_recipe_output
 
 class RecipeOutputValidationTests(unittest.TestCase):
     '''Unit tests for the validate_recipe_output function in gemini_demo.py'''
@@ -33,6 +33,7 @@ class RecipeOutputValidationTests(unittest.TestCase):
             "1. Season the chicken thoroughly.\n"
             "2. Roast until the juices run clear.\n"
         )
+        print(valid_text)
 
         parsed = validate_recipe_output(valid_text)
         self.assertEqual(len(parsed), 2)

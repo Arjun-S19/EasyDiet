@@ -1,4 +1,10 @@
-.env
 __pycache__/
-*.pyc
+.pytest_cache/
 .venv/
+node_modules/
+chat.db
+chat.db-shm
+chat.db-wal
+.env
+.DS_Store
+.chat_state.json
