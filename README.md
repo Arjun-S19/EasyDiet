@@ -68,26 +68,49 @@ VITE_API_BASE=
 
 ### Backend
 
+In a Terminal:
 ```bash
-python3 -m venv .venv
+python --version
+python3 --version
+```
+
+NOTE: If you don't have any python version greater than 3.12 you need to install it from the [website](https://www.python.org/downloads/).
+
+Use python3 in place of python if its version is greater than 3.12 in all of the commands below:
+
+Run in Git Bash:
+```bash
+python -m venv .venv
+```
+If you get this prompt, choose yes:
+
+![alt text](image.png)
+
+Then:
+
+```bash
 source .venv/bin/activate
-pip install -r backend/requirements.txt
-python3 -m uvicorn backend.server:app --reload --host 0.0.0.0 --port 8000
+
+# Use .venv/Scripts/python.exe or .venv/bin/python.exe in place of {python} if running into any errors
+python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.server:app --reload --host 0.0.0.0 --port 8000
 ```
 
 To run tests:
 
 ```bash
-python3 -m pytest backend/tests
+python -m pytest backend/tests
 ```
 
 ### Frontend
 
+Run in Git Bash:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+NOTE: You need to have npm and Node.js installed, if not download it from this [website](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
 
 To run tests:
 
