@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import Navbar from '../components/Navbar'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext.jsx'
+import mascot from '/Mascotv2.png'
 
 const LAST_CHAT_KEY = 'easydiet:lastChatId'
 
@@ -184,7 +185,7 @@ function Chat() {
                   <div className="chat-list-title">{conversation.title || 'Conversation'}</div>
                   <div className="chat-list-snippet">{conversation.last_message_preview || 'No messages yet'}</div>
                 </button>
-                <button type="button" className="link-button" onClick={() => handleDeleteConversation(conversation.id)}>
+                <button type="button" className="link-button-dark" onClick={() => handleDeleteConversation(conversation.id)}>
                   Delete
                 </button>
               </li>
@@ -193,7 +194,7 @@ function Chat() {
         </aside>
 
         <div className="chat-container">
-          <h2>{currentTitle}</h2>
+          <h2><img src={mascot} className="mascot-logo"></img>{currentTitle}</h2>
           {status !== 'ready' && status !== 'sending' && status !== 'idle' && status !== 'loading' && (
             <p style={{ color: 'red' }}>{status}</p>
           )}

@@ -1,3 +1,4 @@
+import logo from '/easydietlogowithtext.png'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthTabs from '../components/AuthTabs'
@@ -46,7 +47,12 @@ function Login() {
     <div className="full-screen-background">
       <main className="content">
         <div className="content-box">
-          <h1>Easy Diet</h1>
+          <img src={logo} 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover' 
+              }}></img>
           <p>Your new healthy diet is just <br />a few clicks away!</p>
           {feedback && <p style={{ color: 'red' }}>{feedback}</p>}
           <AuthTabs

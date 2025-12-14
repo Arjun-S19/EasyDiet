@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext.jsx'
+import logo from '/easydietlogo.png'
 
 function Profile() {
   const { session } = useAuth()
@@ -49,6 +50,7 @@ function Profile() {
 
       <main className="content">
         <div className="content-box profile-box">
+          <img src={logo} className="easydiet-logo"></img>
           <h2 style={{ color: 'black' }}>Nutrition Profile</h2>
           {status && <p>{status}</p>}
           <form onSubmit={handleSubmit}>
