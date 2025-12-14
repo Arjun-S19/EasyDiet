@@ -283,6 +283,16 @@ html, body, #root {
   color: rgb(12, 12, 12);
 }
 
+.chat-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-title .mascot-logo {
+  display: block;
+}
+
 /* messages area */
 .chat-messages {
   flex: 1;
@@ -290,6 +300,7 @@ html, body, #root {
   overflow-y: auto;
   padding: 8px 0;
   margin-bottom: 12px;
+  color:#111;
 }
 
 /* message row */

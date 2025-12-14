@@ -194,7 +194,10 @@ function Chat() {
         </aside>
 
         <div className="chat-container">
-          <h2><img src={mascot} className="mascot-logo"></img>{currentTitle}</h2>
+          <h2 className="chat-title">
+            <img src={mascot} alt="EasyDiet mascot" className="mascot-logo" />
+            {currentTitle}
+          </h2>
           {status !== 'ready' && status !== 'sending' && status !== 'idle' && status !== 'loading' && (
             <p style={{ color: 'red' }}>{status}</p>
           )}
