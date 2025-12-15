@@ -48,7 +48,7 @@ create table public.messages (
 **`backend/.env`**
 
 ```
-GEMINI_API_KEY=
+GEMINI_API_KEYS=
 MODEL_NAME=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -100,6 +100,11 @@ To run tests:
 
 ```bash
 python -m pytest backend/tests
+
+# OR
+
+# ignore pydantic warnings
+python -m pytest -W "ignore:: pydantic.PydanticDeprecatedSince20"
 ```
 
 ### Frontend
