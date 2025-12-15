@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import google.generativeai as genai
 from google.generativeai import types as genai_types
+from google.api_core import exceptions as gapi_exceptions
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,8 +22,35 @@ create_client = getattr(supabase_module, "create_client")
 BASE_DIR = os.path.dirname(__file__)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 load_dotenv()
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+
+# Support rotation: comma-separated list of keys
+GEMINI_API_KEYS = [
+    k.strip()
+    for k in os.getenv("GEMINI_API_KEYS", "").split(",")
+    if k.strip()
+]
+
+if not GEMINI_API_KEYS:
+    raise RuntimeError("GEMINI_API_KEYS env var is required (comma-separated list)")
+
 MODEL = os.getenv("MODEL_NAME", "gemini-2.5-flash")
+
+_current_key_index = 0
+
+
+def _configure_genai():
+    """Configure google.generativeai with the current key."""
+    genai.configure(api_key=GEMINI_API_KEYS[_current_key_index])
+
+
+def _rotate_key():
+    """Advance to the next key in GEMINI_API_KEYS (round-robin)."""
+    global _current_key_index
+    _current_key_index = (_current_key_index + 1) % len(GEMINI_API_KEYS)
+
+
+# Configure once at startup
+_configure_genai()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -34,13 +62,16 @@ with open("backend/system_prompt.txt", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
 
 PROFILE_EXTRACTION_PROMPT = """You receive the current nutrition profile and the user's latest message. If the message updates their fitness goals or dietary restrictions, return JSON with keys `fitness_goals` and `dietary_restrictions`. Use null when no change is present. Respond with JSON only."""
-PROFILE_MODEL = genai.GenerativeModel(
-    MODEL,
-    system_instruction=PROFILE_EXTRACTION_PROMPT,
-)
+
+def profile_model() -> genai.GenerativeModel:
+    return genai.GenerativeModel(
+        MODEL,
+        system_instruction=PROFILE_EXTRACTION_PROMPT,
+    )
 
 HTML_GENERATION_CONFIG = genai_types.GenerationConfig(response_mime_type="text/plain")
 
+MAX_GEMINI_ATTEMPTS = len(GEMINI_API_KEYS) or 2
 MAX_TURNS = 30  # keep newest 30 user+model pairs
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
 
@@ -202,17 +233,91 @@ def touch_conversation(conversation_id: str, preview: str) -> None:
     if getattr(response, "error", None):
         raise HTTPException(status_code=500, detail=str(response.error))
 
+def generate_chat_with_rotation(
+    profile: Dict[str, Any],
+    history,
+):
+    """
+    Generate a chat response, load-balancing across keys and failing
+    over to other keys on quota/auth errors.
+    """
+    last_exc = None
+    n_keys = len(GEMINI_API_KEYS)
+    attempts = 0
 
-def detect_profile_updates(message: str, profile: Dict[str, Any]) -> Dict[str, str]:
+    while attempts < n_keys:
+        attempts += 1
+
+        # Configure client with the *current* key
+        _configure_genai()
+
+        try:
+            chat_model = conversation_model(profile)
+            response = chat_model.generate_content(
+                history,
+                generation_config=HTML_GENERATION_CONFIG,
+            )
+            # On success, advance so the NEXT request uses the next key
+            _rotate_key()
+            return response
+
+        except (gapi_exceptions.ResourceExhausted, gapi_exceptions.PermissionDenied) as exc:
+            # quota/auth error → move to the next key and retry
+            last_exc = exc
+            _rotate_key()
+            continue
+
+        except Exception as exc:
+            # Non-retryable error: bail out
+            last_exc = exc
+            break
+
+    # All keys failed
+    raise last_exc or RuntimeError("Gemini generation failed with unknown error")
+
+
+def detect_profile_updates_with_rotation(message: str, profile: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Detect profile updates using Gemini, load-balancing across keys and
+    failing over on quota/auth errors. On total failure, returns {}.
+    """
     prompt = f"Current profile: {profile}\nUser message: {message}"
+    last_exc = None
+    n_keys = len(GEMINI_API_KEYS)
+    attempts = 0
+
+    while attempts < n_keys:
+        attempts += 1
+
+        _configure_genai()
+
+        try:
+            model = profile_model()
+            response = model.generate_content(
+                [{"role": "user", "parts": [prompt]}],
+                generation_config=genai_types.GenerationConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            raw_text = response.text or ""
+            parsed = parse_profile_update(raw_text)
+            updates = diff_profile(profile, parsed)
+
+            # success → advance pointer for next request
+            _rotate_key()
+            return updates
+
+        except (gapi_exceptions.ResourceExhausted, gapi_exceptions.PermissionDenied) as exc:
+            last_exc = exc
+            _rotate_key()
+            continue
+
+        except Exception as exc:
+            last_exc = exc
+            break
+
     with suppress(Exception):
-        response = PROFILE_MODEL.generate_content(
-            [{"role": "user", "parts": [prompt]}],
-            generation_config=genai_types.GenerationConfig(response_mime_type="application/json"),
-        )
-        raw_text = response.text or ""
-        parsed = parse_profile_update(raw_text)
-        return diff_profile(profile, parsed)
+        print("Profile update detection failed for all keys:", last_exc)
     return {}
 
 
@@ -286,10 +391,9 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
 
     history = fetch_history(conversation_id)
     profile = ensure_profile(user_id)
-    chat_model = conversation_model(profile)
 
     try:
-        response = chat_model.generate_content(history, generation_config=HTML_GENERATION_CONFIG)
+        response = generate_chat_with_rotation(profile, history)
         reply = response.text or "(no response)"
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Gemini error: {exc}") from exc
@@ -297,7 +401,7 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
     insert_message(conversation_id, "model", reply, user_id=None)
     touch_conversation(conversation_id, reply)
 
-    updates = detect_profile_updates(body.message, profile)
+    updates = detect_profile_updates_with_rotation(body.message, profile)
     if updates:
         update_profile(user_id, updates)
 
