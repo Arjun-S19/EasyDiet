@@ -100,6 +100,11 @@ To run tests:
 
 ```bash
 python -m pytest backend/tests
+
+# OR
+
+# ignore pydantic warnings
+python -m pytest -W "ignore:: pydantic.PydanticDeprecatedSince20"
 ```
 
 ### Frontend
