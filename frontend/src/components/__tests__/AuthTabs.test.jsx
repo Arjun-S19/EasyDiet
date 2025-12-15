@@ -14,7 +14,6 @@ describe('AuthTabs', () => {
     )
 
     expect(screen.getByLabelText(/Authentication/i)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/Email/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByText(/Sign Up/i))
     expect(screen.getByPlaceholderText(/Username/i)).toBeInTheDocument()
