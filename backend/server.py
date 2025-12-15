@@ -4,6 +4,7 @@ import uuid
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from itertools import cycle
 
 import google.generativeai as genai
 from google.generativeai import types as genai_types
@@ -21,7 +22,27 @@ create_client = getattr(supabase_module, "create_client")
 BASE_DIR = os.path.dirname(__file__)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 load_dotenv()
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+
+# 1. Load keys into a list
+_keys_str = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
+API_KEYS = [k.strip() for k in _keys_str.split(",") if k.strip()]
+
+if not API_KEYS:
+    raise ValueError("No GEMINI_API_KEYS found. Check your .env file.")
+
+# 2. Create an infinite cycle: [Key A, Key B, Key A, Key B...]
+KEY_CYCLE = cycle(API_KEYS)
+
+def rotate_key():
+    """
+    Picks the next key in the line and configures the global SDK.
+    Call this at the start of every request handler.
+    """
+    next_key = next(KEY_CYCLE)
+    genai.configure(api_key=next_key)
+
+rotate_key()
+
 MODEL = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -289,6 +310,8 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
     chat_model = conversation_model(profile)
 
     try:
+        rotate_key()
+
         response = chat_model.generate_content(history, generation_config=HTML_GENERATION_CONFIG)
         reply = response.text or "(no response)"
     except Exception as exc:
@@ -297,6 +320,8 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
     insert_message(conversation_id, "model", reply, user_id=None)
     touch_conversation(conversation_id, reply)
 
+    rotate_key()
+    
     updates = detect_profile_updates(body.message, profile)
     if updates:
         update_profile(user_id, updates)
