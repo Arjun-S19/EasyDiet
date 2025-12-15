@@ -24,8 +24,6 @@ def reset_keys(monkeypatch):
 
     yield
 
-    # (No teardown needed; pytest will reload fixtures per test)
-
 
 def _setup_fake_conversation_model(monkeypatch, behaviors):
     """
@@ -86,9 +84,10 @@ def _setup_fake_profile_model(monkeypatch, behaviors):
     return call_counter, rotate_calls
 
 
-def test_chat_success_no_rotation(monkeypatch):
+def test_chat_success_rotates_once(monkeypatch):
     """
-    If the first key works, we should not rotate and we should get the reply.
+    If the first key works, we should NOT failover, but we DO rotate once
+    so the next request uses the next key.
     """
     def behavior_success(_i):
         return DummyResponse("ok")
@@ -103,12 +102,16 @@ def test_chat_success_no_rotation(monkeypatch):
     assert isinstance(response, DummyResponse)
     assert response.text == "ok"
     assert call_counter["n"] == 1
-    assert len(rotate_calls) == 0  # no rotation
+    # New behavior: rotate once after success
+    assert len(rotate_calls) == 1
 
 
 def test_chat_rotate_then_succeed(monkeypatch):
     """
     If the first key hits quota/permission error, we rotate to the next key and succeed.
+    With load-balancing, we rotate:
+      - once on failure (to move off the bad key),
+      - once on success (so the next request starts after the successful key).
     """
     def behavior_fail_first(call_index):
         # first call: quota exceeded
@@ -127,13 +130,14 @@ def test_chat_rotate_then_succeed(monkeypatch):
     assert response.text == "ok after rotate"
     # We should have tried twice: fail (key1) then success (key2)
     assert call_counter["n"] == 2
-    # Rotation should have been called exactly once (after first failure)
-    assert len(rotate_calls) == 1
+    # Rotation should have been called twice: once for failover, once after success
+    assert len(rotate_calls) == 2
 
 
 def test_chat_all_keys_fail(monkeypatch):
     """
-    If all keys hit quota/permission errors, the helper should raise.
+    If all keys hit quota/permission errors, the helper should rotate
+    through all keys and then raise.
     """
     def behavior_always_fail(_i):
         raise gapi_exceptions.ResourceExhausted("quota exceeded")
@@ -158,8 +162,8 @@ def test_chat_all_keys_fail(monkeypatch):
 def test_profile_updates_rotate_then_succeed(monkeypatch):
     """
     detect_profile_updates_with_rotation should rotate on error and then return diffs.
+    We also rotate once more after success for load-balancing.
     """
-    # Fake parsed profile update returned from parse_profile_update
     parsed_profile = {"fitness_goals": "new goal"}
 
     # Patch parse_profile_update & diff_profile to be deterministic
@@ -185,12 +189,14 @@ def test_profile_updates_rotate_then_succeed(monkeypatch):
 
     assert updates == {"fitness_goals": "new goal"}
     assert call_counter["n"] == 2
-    assert len(rotate_calls) == 1
+    # One rotation on failure, one after success
+    assert len(rotate_calls) == 2
 
 
 def test_profile_updates_all_fail_returns_empty(monkeypatch):
     """
     If profile extraction fails for all keys, it should NOT raise; it should return {}.
+    We still rotate once per failure.
     """
     monkeypatch.setattr(server, "parse_profile_update", lambda raw: {}, raising=False)
     monkeypatch.setattr(
