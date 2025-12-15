@@ -4,6 +4,8 @@ import uuid
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+import threading
 from itertools import cycle
 
 import google.generativeai as genai
@@ -23,25 +25,39 @@ BASE_DIR = os.path.dirname(__file__)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 load_dotenv()
 
-# 1. Load keys into a list
+class KeyRotator:
+    def __init__(self, keys: List[str]):
+        if not keys:
+            raise ValueError("No API keys provided.")
+        self._keys = keys
+        self._cycle = cycle(keys)
+        # Lock protects the iterator from concurrent access by multiple threads
+        self._lock = threading.Lock()
+
+    def rotate(self) -> str:
+        """
+        Safely gets the next key and updates the global configuration.
+        """
+        with self._lock:
+            # Critical section: only one thread can advance the iterator at a time
+            next_key = next(self._cycle)
+            
+            genai.configure(api_key=next_key)
+            return next_key
+
+
+# Load keys into a list
 _keys_str = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
 API_KEYS = [k.strip() for k in _keys_str.split(",") if k.strip()]
 
 if not API_KEYS:
     raise ValueError("No GEMINI_API_KEYS found. Check your .env file.")
 
-# 2. Create an infinite cycle: [Key A, Key B, Key A, Key B...]
-KEY_CYCLE = cycle(API_KEYS)
+# Initialize the thread-safe rotator
+key_rotator = KeyRotator(API_KEYS)
 
-def rotate_key():
-    """
-    Picks the next key in the line and configures the global SDK.
-    Call this at the start of every request handler.
-    """
-    next_key = next(KEY_CYCLE)
-    genai.configure(api_key=next_key)
-
-rotate_key()
+# Initial configuration
+key_rotator.rotate()
 
 MODEL = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
@@ -310,7 +326,7 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
     chat_model = conversation_model(profile)
 
     try:
-        rotate_key()
+        key_rotator.rotate()
 
         response = chat_model.generate_content(history, generation_config=HTML_GENERATION_CONFIG)
         reply = response.text or "(no response)"
@@ -320,8 +336,6 @@ def chat(body: ChatIn, user_id: str = Depends(get_current_user)):
     insert_message(conversation_id, "model", reply, user_id=None)
     touch_conversation(conversation_id, reply)
 
-    rotate_key()
-    
     updates = detect_profile_updates(body.message, profile)
     if updates:
         update_profile(user_id, updates)
