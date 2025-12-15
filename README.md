@@ -48,7 +48,7 @@ create table public.messages (
 **`backend/.env`**
 
 ```
-GEMINI_API_KEY=
+GEMINI_API_KEYS=
 MODEL_NAME=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
